@@ -1,0 +1,56 @@
+version: '3.7'
+services:
+  nginx:
+    image: nginx:1.25.0
+    volumes:
+      - ./web:/srv/http/web
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf
+    depends_on:
+      - web
+    ports:
+      - 8080:80
+
+  web:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: web
+    deploy:
+      replicas: 2
+    restart: on-failure # wait rabbitmq readiness
+    depends_on:
+      - rabbitmq
+    environment:
+      - TZ=Asia/Almaty
+      - NODE_ENV=production
+      - PORT=80
+      - AMQP_CONNECTION_STRING=amqp://bunny:secret@rabbitmq:5672/bunny
+      - AMQP_EXCHANGE=web-exchange
+      - AMQP_QUEUE=web-queue
+
+  worker:
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: worker
+    deploy:
+      replicas: 2
+      endpoint_mode: vip
+    restart: on-failure # wait rabbitmq readiness
+    depends_on:
+      - rabbitmq
+    environment:
+      - TZ=Asia/Almaty
+      - NODE_ENV=production
+      - AMQP_CONNECTION_STRING=amqp://bunny:secret@rabbitmq:5672/bunny
+      - AMQP_QUEUE=web-queue
+
+  rabbitmq:
+    image: rabbitmq:3.12.2
+    environment:
+      RABBITMQ_DEFAULT_USER: bunny
+      RABBITMQ_DEFAULT_PASS: secret
+      RABBITMQ_DEFAULT_VHOST: bunny
+    ports:
+      - 5672:5672
+      - 15672:15672
